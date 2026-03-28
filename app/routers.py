@@ -999,7 +999,7 @@ async def login(
     )
 
     # Plan comes from subscription, not from superuser flag
-    plan = "developer"
+    plan = "free"
     
     return LoginResponse(
         access_token=access_token,
@@ -1208,11 +1208,11 @@ async def verify(payload: VerifyRequest, db: AsyncSession = Depends(get_db)):
             if raw_plan in {"developer", "plus", "enterprise"}:
                 plan = raw_plan
             elif raw_plan in {"free", "starter"}:
-                plan = "developer"
+                plan = "free"
             elif raw_plan in {"pro"}:
                 plan = "plus"
             else:
-                plan = "developer"
+                plan = "free"
         
         # Role is determined by OrgMembership, NOT by is_superuser flag.
         # is_superuser only grants owner dashboard access (validated in owner_auth.py).

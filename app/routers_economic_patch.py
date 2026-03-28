@@ -100,7 +100,7 @@ async def register(
         economic_state = await create_user_economic_state(
             user_id=user.id,
             org_id=org.id,
-            tier="developer",  # Default tier for new users
+            tier="free",  # Default tier for new users
             subscription_source="internal",
             is_dev_override=False,
         )
