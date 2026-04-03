@@ -296,6 +296,11 @@ def _clear_auth_cookies(response: Response):
         response.delete_cookie("rg_session", path="/", domain=domain)
 
 
+def _internal_headers() -> dict:
+    """Build headers for internal service-to-service calls."""
+    return {"X-Internal-Key": settings.INTERNAL_SERVICE_KEY} if settings.INTERNAL_SERVICE_KEY else {}
+
+
 def _generate_crypto_identity(user_id: UUID, email: str) -> tuple[str, str, str]:
     """Generate cryptographic identity for a user.
     
@@ -545,6 +550,7 @@ async def register(
         async with httpx.AsyncClient(timeout=5.0) as client:
             blockchain_response = await client.post(
                 f"{settings.BLOCKCHAIN_SERVICE_URL}/identity/register",
+                headers=_internal_headers(),
                 json={
                     "user_id": str(user.id),
                     "crypto_hash": crypto_hash,
@@ -926,6 +932,7 @@ async def login(
             async with httpx.AsyncClient(timeout=5.0) as client:
                 await client.post(
                     f"{settings.BLOCKCHAIN_SERVICE_URL}/identity/register",
+                    headers=_internal_headers(),
                     json={
                         "user_id": str(user.id),
                         "crypto_hash": crypto_hash,
@@ -2942,6 +2949,7 @@ async def _handle_oauth_callback(
                 async with httpx.AsyncClient(timeout=5.0) as client:
                     await client.post(
                         f"{settings.BLOCKCHAIN_SERVICE_URL}/identity/register",
+                        headers=_internal_headers(),
                         json={
                             "user_id": str(user.id),
                             "crypto_hash": crypto_hash,
@@ -3016,6 +3024,7 @@ async def _handle_oauth_callback(
             async with httpx.AsyncClient(timeout=5.0) as client:
                 await client.post(
                     f"{settings.BLOCKCHAIN_SERVICE_URL}/identity/register",
+                    headers=_internal_headers(),
                     json={
                         "user_id": str(user.id),
                         "crypto_hash": crypto_hash,

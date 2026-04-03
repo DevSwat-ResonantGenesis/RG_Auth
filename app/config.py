@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     
     # Service URLs
     HASH_SPHERE_URL: str = os.getenv("HASH_SPHERE_URL", "http://hash_sphere:8000")
-    BLOCKCHAIN_SERVICE_URL: str = os.getenv("BLOCKCHAIN_SERVICE_URL", "http://blockchain_service:8000")
+    BLOCKCHAIN_SERVICE_URL: str = os.getenv("BLOCKCHAIN_SERVICE_URL", "http://external_blockchain_service:8000")
     
     # GeoIP service (MaxMind)
     MAXMIND_LICENSE_KEY: str = ""
