@@ -38,8 +38,8 @@ _oauth_manager = OAuthManager()
 
 GOOGLE_SERVICE_SCOPES: Dict[str, list] = {
     "google-drive": [
-        "https://www.googleapis.com/auth/drive",
         "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/drive.readonly",
     ],
     "google-calendar": [
         "https://www.googleapis.com/auth/calendar",
