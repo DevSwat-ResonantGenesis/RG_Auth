@@ -2804,20 +2804,133 @@ async def oauth_callback_compatibility(
     Compatibility OAuth callback endpoint at /auth/oauth/callback.
     This matches the registered OAuth app callback URLs for Google and GitHub.
     Provider is extracted from the state parameter.
+
+    If the state indicates a SERVICE CONNECTION (Drive/Calendar/Gmail), handle it
+    here directly instead of treating it as a login.
     """
-    if error:
-        raise HTTPException(
-            status_code=400,
-            detail=f"OAuth error: {error}. {error_description or ''}"
-        )
-    
-    # Extract provider from state (stored in Redis)
+    from fastapi.responses import RedirectResponse as _Redirect
     from .oauth_redis import get_oauth_state
+
+    frontend_url = _oauth_manager.frontend_url  # e.g. https://dev-swat.com
+
+    if error:
+        return _Redirect(
+            url=f"{frontend_url}/connect-profiles?status=error&message={error}",
+            status_code=302,
+        )
+
     state_data = get_oauth_state(state)
     if not state_data:
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
-    
-    provider = state_data.get("provider", "google")  # Default to google
+
+    extra = state_data.get("extra_data", {})
+
+    # ── SERVICE CONNECTION (Drive / Calendar / Gmail) ──────────────────
+    if extra.get("service_connection"):
+        service = extra.get("service", "")
+        stored_user_id = extra.get("user_id")
+        logger.info("Service connection callback: service=%s user=%s", service, stored_user_id)
+
+        # Don't consume state yet — validate_oauth_state does that
+        from .oauth import validate_oauth_state, OAUTH_PROVIDERS, is_provider_configured
+        validate_oauth_state(state)  # consume + verify expiry
+
+        if not is_provider_configured("google"):
+            return _Redirect(
+                url=f"{frontend_url}/connect-profiles?service={service}&status=error&message=Google+OAuth+not+configured",
+                status_code=302,
+            )
+
+        google_config = OAUTH_PROVIDERS["google"]
+        redirect_uri = state_data.get("redirect_uri", "")
+
+        # Exchange code for tokens
+        import httpx as _httpx
+        try:
+            async with _httpx.AsyncClient(timeout=15.0) as client:
+                token_resp = await client.post(
+                    google_config.token_url,
+                    data={
+                        "client_id": google_config.client_id,
+                        "client_secret": google_config.client_secret,
+                        "code": code,
+                        "redirect_uri": redirect_uri,
+                        "grant_type": "authorization_code",
+                    },
+                    headers={"Accept": "application/json"},
+                )
+                token_resp.raise_for_status()
+                tokens = token_resp.json()
+        except Exception as e:
+            logger.error("Service connection token exchange failed: %s", e)
+            return _Redirect(
+                url=f"{frontend_url}/connect-profiles?service={service}&status=error&message=Token+exchange+failed",
+                status_code=302,
+            )
+
+        access_token = tokens.get("access_token")
+        refresh_token = tokens.get("refresh_token")
+        if not access_token:
+            return _Redirect(
+                url=f"{frontend_url}/connect-profiles?service={service}&status=error&message=No+access+token",
+                status_code=302,
+            )
+
+        token_to_store = refresh_token or access_token
+        key_prefix = f"g_{service.replace('google-', '')[:8]}"
+        friendly_name = f"Google {service.replace('google-', '').replace('-', ' ').title()}"
+
+        # Resolve user — use stored_user_id from the state (the user who initiated)
+        from uuid import UUID as _UUID
+        try:
+            user_uuid = _UUID(stored_user_id) if stored_user_id else None
+        except (ValueError, TypeError):
+            user_uuid = None
+
+        if not user_uuid:
+            return _Redirect(
+                url=f"{frontend_url}/connect-profiles?service={service}&status=error&message=Invalid+user",
+                status_code=302,
+            )
+
+        from .crypto import encrypt_api_key
+        existing = await db.execute(
+            select(UserApiKey).where(
+                UserApiKey.user_id == user_uuid,
+                UserApiKey.provider == service,
+            )
+        )
+        existing_key = existing.scalar_one_or_none()
+
+        if existing_key:
+            existing_key.encrypted_key = encrypt_api_key(token_to_store)
+            existing_key.key_prefix = key_prefix
+            existing_key.is_valid = True
+            existing_key.name = friendly_name
+        else:
+            new_key = UserApiKey(
+                user_id=user_uuid,
+                provider=service,
+                name=friendly_name,
+                encrypted_key=encrypt_api_key(token_to_store),
+                key_prefix=key_prefix,
+                is_valid=True,
+            )
+            db.add(new_key)
+
+        await db.commit()
+        logger.info(
+            "Service connected via GET callback: service=%s user=%s has_refresh=%s",
+            service, stored_user_id, bool(refresh_token),
+        )
+
+        return _Redirect(
+            url=f"{frontend_url}/connect-profiles?service={service}&status=connected",
+            status_code=302,
+        )
+
+    # ── REGULAR LOGIN ──────────────────────────────────────────────────
+    provider = state_data.get("provider", "google")
     return await _handle_oauth_callback(provider, code, state, request, response, db)
 
 
