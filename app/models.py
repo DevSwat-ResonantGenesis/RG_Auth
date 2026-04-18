@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSON
 import uuid
 
@@ -171,19 +171,21 @@ class UserApiKey(Base):
     
     Stores user-provided API keys for external AI providers like OpenAI, Anthropic, etc.
     Keys are stored encrypted for security.
+    Multiple keys per provider per user are supported — is_primary marks the default.
     """
     __tablename__ = "user_api_keys"
     __table_args__ = (
-        UniqueConstraint("user_id", "provider", name="uq_user_api_keys_user_provider"),
+        Index("ix_user_api_keys_user_provider", "user_id", "provider"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    provider = Column(String(50), nullable=False)  # openai, anthropic, google, groq, mistral
+    provider = Column(String(50), nullable=False)  # openai, anthropic, google, groq, mistral, openrouter, ...
     name = Column(String(255), nullable=True)  # User-friendly name
     encrypted_key = Column(Text, nullable=False)  # Encrypted API key
     key_prefix = Column(String(12), nullable=True)  # First few chars for display (e.g., "sk-abc...")
     is_valid = Column(Boolean, default=True, nullable=False)
+    is_primary = Column(Boolean, default=False, nullable=False)  # Primary key used by default for this provider
     last_validated_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

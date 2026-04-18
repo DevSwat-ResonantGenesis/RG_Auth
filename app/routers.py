@@ -1643,6 +1643,7 @@ class UserApiKeyResponse(BaseModel):
     name: str
     key_prefix: str  # First 8 chars for display
     is_valid: bool
+    is_primary: bool = False
     last_used: Optional[str] = None
     created_at: str
 
@@ -1736,6 +1737,7 @@ async def get_user_api_keys(
             "name": key.name or f"{key.provider} Key",
             "key_prefix": key.key_prefix or "***",
             "is_valid": key.is_valid,
+            "is_primary": getattr(key, 'is_primary', False),
             "created_at": key.created_at.isoformat() if key.created_at else None,
         })
     
@@ -1754,41 +1756,27 @@ async def add_user_api_key(
     # Validate the key format
     key_prefix = payload.api_key[:8] if len(payload.api_key) > 8 else payload.api_key[:4] + "..."
     
-    # Check if key for this provider already exists
+    # Check how many keys exist for this provider
     existing = await db.execute(
         select(UserApiKey).where(
             UserApiKey.user_id == identity.user_id,
             UserApiKey.provider == payload.provider.lower()
         )
     )
-    existing_key = existing.scalar_one_or_none()
+    existing_keys = existing.scalars().all()
     
-    if existing_key:
-        # Update existing key
-        existing_key.encrypted_key = encrypt_api_key(payload.api_key)
-        existing_key.key_prefix = key_prefix
-        existing_key.is_valid = True
-        existing_key.name = payload.name or existing_key.name
-        await db.commit()
-        await db.refresh(existing_key)
-        
-        return UserApiKeyResponse(
-            id=str(existing_key.id),
-            provider=existing_key.provider,
-            name=existing_key.name or f"{existing_key.provider} Key",
-            key_prefix=key_prefix,
-            is_valid=True,
-            created_at=existing_key.created_at.isoformat() if existing_key.created_at else _utcnow().isoformat(),
-        )
+    # First key for this provider becomes primary automatically
+    is_first_key = len(existing_keys) == 0
     
-    # Create new key
+    # Create new key (always — multiple keys per provider allowed)
     new_key = UserApiKey(
         user_id=identity.user_id,
         provider=payload.provider.lower(),
-        name=payload.name or f"{payload.provider} Key",
+        name=payload.name or f"{payload.provider} Key {len(existing_keys) + 1}",
         encrypted_key=encrypt_api_key(payload.api_key),
         key_prefix=key_prefix,
         is_valid=True,
+        is_primary=is_first_key,
     )
     db.add(new_key)
     await db.commit()
@@ -1800,6 +1788,7 @@ async def add_user_api_key(
         name=new_key.name,
         key_prefix=key_prefix,
         is_valid=True,
+        is_primary=new_key.is_primary,
         created_at=new_key.created_at.isoformat() if new_key.created_at else _utcnow().isoformat(),
     )
 
@@ -1847,6 +1836,30 @@ async def validate_user_api_key(
             models = ["llama-3.1-70b", "mixtral-8x7b"]
         else:
             error = "Invalid Groq API key format. Should start with 'gsk_'"
+    elif provider == "openrouter":
+        valid = api_key.startswith("sk-or-") and len(api_key) > 20
+        if valid:
+            models = ["auto", "openai/gpt-4o", "anthropic/claude-3.5-sonnet"]
+        else:
+            error = "Invalid OpenRouter API key format. Should start with 'sk-or-'"
+    elif provider == "deepseek":
+        valid = api_key.startswith("sk-") and len(api_key) > 20
+        if valid:
+            models = ["deepseek-chat", "deepseek-coder"]
+        else:
+            error = "Invalid DeepSeek API key format. Should start with 'sk-'"
+    elif provider == "grok":
+        valid = api_key.startswith("xai-") and len(api_key) > 20
+        if valid:
+            models = ["grok-2", "grok-2-mini"]
+        else:
+            error = "Invalid Grok API key format. Should start with 'xai-'"
+    elif provider in ("together", "fireworks", "cohere", "perplexity", "huggingface", "replicate", "stability", "elevenlabs", "kimi", "metaai", "copilot", "glm"):
+        valid = len(api_key) > 10
+        if valid:
+            models = []
+        else:
+            error = f"Invalid {provider} API key"
     else:
         valid = len(api_key) > 10
         if not valid:
@@ -1899,7 +1912,7 @@ async def delete_user_api_key_by_provider(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete a user API key by provider name (e.g. 'openai', 'anthropic')."""
+    """Delete ALL user API keys for a given provider."""
     identity = await _get_identity_from_request(request, db)
     
     result = await db.execute(
@@ -1908,15 +1921,55 @@ async def delete_user_api_key_by_provider(
             UserApiKey.provider == provider.lower()
         )
     )
-    key = result.scalar_one_or_none()
+    keys = result.scalars().all()
     
-    if not key:
-        raise HTTPException(status_code=404, detail=f"No key found for provider: {provider}")
+    if not keys:
+        raise HTTPException(status_code=404, detail=f"No keys found for provider: {provider}")
     
-    await db.delete(key)
+    for key in keys:
+        await db.delete(key)
     await db.commit()
     
-    return {"success": True, "deleted": True, "provider": provider}
+    return {"success": True, "deleted": len(keys), "provider": provider}
+
+
+@router.put("/auth/user/api-keys/{key_id}/set-primary")
+async def set_primary_api_key(
+    key_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Set a specific key as primary for its provider."""
+    identity = await _get_identity_from_request(request, db)
+    
+    try:
+        key_uuid = UUID(key_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid key ID format")
+    
+    # Find the target key
+    result = await db.execute(
+        select(UserApiKey).where(
+            UserApiKey.id == key_uuid,
+            UserApiKey.user_id == identity.user_id
+        )
+    )
+    target_key = result.scalar_one_or_none()
+    if not target_key:
+        raise HTTPException(status_code=404, detail="API key not found")
+    
+    # Unset primary on all other keys for same provider
+    siblings = await db.execute(
+        select(UserApiKey).where(
+            UserApiKey.user_id == identity.user_id,
+            UserApiKey.provider == target_key.provider
+        )
+    )
+    for k in siblings.scalars().all():
+        k.is_primary = (k.id == target_key.id)
+    
+    await db.commit()
+    return {"success": True, "primary_key_id": key_id, "provider": target_key.provider}
 
 
 @router.get("/auth/user/trial-status")
@@ -2051,8 +2104,9 @@ async def get_user_api_keys_internal(
     user_keys = result.scalars().all()
     
     # Return decrypted keys for internal service use
+    # Sort so primary keys come first per provider
     keys = []
-    for key in user_keys:
+    for key in sorted(user_keys, key=lambda k: (k.provider, not getattr(k, 'is_primary', False))):
         try:
             decrypted_key = decrypt_api_key(key.encrypted_key)
         except Exception:
@@ -2062,6 +2116,8 @@ async def get_user_api_keys_internal(
             "provider": key.provider,
             "api_key": decrypted_key,
             "name": key.name or f"{key.provider} Key",
+            "is_primary": getattr(key, 'is_primary', False),
+            "key_id": str(key.id),
         })
     
     return {"keys": keys, "user_id": user_id}
