@@ -1335,10 +1335,21 @@ async def desktop_callback(request: Request):
         except Exception:
             pass
 
-    # Not logged in — redirect straight to the existing login page
-    # After login, redirect back here so the cookie check succeeds
+    # Not logged in — set a cookie so OAuth callback can redirect token to IDE
+    # This survives the Google/GitHub OAuth multi-step flow
     return_url = urllib.parse.quote(f"/auth/desktop-callback?port={port}")
-    return RedirectResponse(f"/login?redirect={return_url}")
+    resp = RedirectResponse(f"/login?redirect={return_url}")
+    is_dev = settings.ENVIRONMENT == "development"
+    resp.set_cookie(
+        "rg_desktop_port",
+        port,
+        httponly=True,
+        secure=not is_dev,
+        samesite="lax",
+        max_age=600,  # 10 minutes — enough for OAuth flow
+        path="/",
+    )
+    return resp
 
 
 @router.get("/auth/api-keys", response_model=List[ApiKeyResponse])
@@ -3253,6 +3264,30 @@ async def _handle_oauth_callback(
     # Create tokens
     access_token = create_access_token(identity, user.token_version)
     refresh_plain = await _issue_refresh_token(db, identity, request)
+    
+    # ── Desktop IDE callback: if rg_desktop_port cookie exists, redirect
+    #    the token directly to the IDE's localhost server instead of /dashboard.
+    #    This cookie is set by /auth/desktop-callback when the user wasn't
+    #    logged in yet and had to go through Google/GitHub OAuth.
+    desktop_port = request.cookies.get("rg_desktop_port")
+    if desktop_port and desktop_port.isdigit():
+        import urllib.parse
+        from fastapi.responses import RedirectResponse as _Redir
+        callback_url = f"http://localhost:{desktop_port}/auth-callback?token={urllib.parse.quote(access_token)}"
+        logger.info(f"OAuth desktop redirect: sending token to localhost:{desktop_port}")
+        ide_resp = _Redir(callback_url)
+        # Set auth cookies so the website is also logged in
+        _set_auth_cookies(
+            ide_resp,
+            access_token,
+            refresh_plain,
+            user_email=user.email,
+            user_role=membership.role,
+            org_id=str(membership.org_id),
+        )
+        # Clear the desktop port cookie
+        ide_resp.delete_cookie("rg_desktop_port", path="/")
+        return ide_resp
     
     # Return HTML with JavaScript to handle OAuth callback
     # Google redirects browser to this URL, so we need HTML not JSON
