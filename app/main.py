@@ -16,6 +16,14 @@ try:
     from .routers import router as auth_router
     from .owner_auth import router as owner_auth_router
     from .config import settings
+    # Extracted domain routers
+    from .mfa_routes import router as mfa_router
+    from .password_routes import router as password_router
+    from .email_routes import router as email_router
+    from .sessions_routes import router as sessions_router
+    from .byok_routes import router as byok_router
+    from .api_keys_routes import router as api_keys_router
+    from .agent_settings_routes import router as agent_settings_router
     print("✅ Real auth components loaded")
 except ImportError as e:
     print(f"❌ Import error: {e}")
@@ -25,6 +33,13 @@ except ImportError as e:
     auth_router = None
     owner_auth_router = None
     settings = None
+    mfa_router = None
+    password_router = None
+    email_router = None
+    sessions_router = None
+    byok_router = None
+    api_keys_router = None
+    agent_settings_router = None
 
 # Single service entrypoint
 app = FastAPI(
@@ -67,9 +82,20 @@ async def root():
 if auth_router:
     app.include_router(auth_router, tags=["auth"])
     print("✅ Real auth router included")
-else:
-    # Fallback endpoints removed - using real router endpoints instead
-    pass
+
+# Include extracted domain routers
+for _name, _router in [
+    ("mfa", mfa_router),
+    ("password", password_router),
+    ("email", email_router),
+    ("sessions", sessions_router),
+    ("byok", byok_router),
+    ("api-keys", api_keys_router),
+    ("agent-settings", agent_settings_router),
+]:
+    if _router:
+        app.include_router(_router, tags=[_name])
+print("✅ Domain routers included")
 
 # Include owner auth router for platform owner login
 if owner_auth_router:
@@ -132,7 +158,7 @@ async def public_signup_alias(
         from .routers import signup
         # Get the JSON body
         body = await request.json()
-        from .routers import RegisterRequest
+        from .schemas import RegisterRequest
         payload = RegisterRequest(**body)
         return await signup(request, payload, response, db)
     raise HTTPException(status_code=503, detail="Auth router not available")
