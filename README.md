@@ -128,7 +128,7 @@ git@github-devswat:DevSwat-ResonantGenesis/RG_Auth.git
 │    routers_services.py   ── /auth/services/* (Google, Slack)     │
 │                                                                  │
 │  Outbound calls:                                                 │
-│    ├── RG_Blockchain  (external_blockchain_service:8000)         │
+│    ├── RG_DSID_Blockchain (external_blockchain_service:8000)     │
 │    │   → Crypto identity provisioning on signup                  │
 │    └── Redis (shared_redis:6379)                                 │
 │        → Rate limiting, OAuth state, session cache               │
@@ -171,7 +171,7 @@ git@github-devswat:DevSwat-ResonantGenesis/RG_Auth.git
 |---|---|---|
 | **PostgreSQL** | `AUTH_DATABASE_URL` env var | All persistent data (users, orgs, keys, tokens) |
 | **Redis** | `redis://shared_redis:6379` | Rate limiting, OAuth state storage, session cache |
-| **RG_Blockchain** | `http://external_blockchain_service:8000` | Crypto identity provisioning on user signup |
+| **RG_DSID_Blockchain** | `http://external_blockchain_service:8000` | Crypto identity provisioning on user signup |
 
 ### Services that READ from Auth (internal calls)
 
