@@ -189,7 +189,7 @@ git@github-devswat:DevSwat-ResonantGenesis/RG_Auth.git
 | **RG_User_Service** | Auth doesn't know about profiles/preferences — separate concern |
 | **RG_Billing** | Auth doesn't check credits — billing is independent |
 | **RG_Chat** | Auth has no direct chat dependency |
-| **RG_Mining** | Mining authenticates via Gateway headers, not direct auth calls |
+| **RG_TrainingNet_Mining** | Mining authenticates via Gateway headers, not direct auth calls |
 
 ---
 
