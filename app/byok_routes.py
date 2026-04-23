@@ -199,6 +199,12 @@ async def validate_user_api_key(
             models = ["grok-2", "grok-2-mini"]
         else:
             error = "Invalid Grok API key format. Should start with 'xai-'"
+    elif provider == "bedrock":
+        valid = len(api_key) > 20
+        if valid:
+            models = ["anthropic.claude-3-5-sonnet-20241022-v2:0", "anthropic.claude-3-haiku-20240307-v1:0", "meta.llama3-1-70b-instruct-v1:0", "amazon.nova-pro-v1:0", "amazon.nova-lite-v1:0"]
+        else:
+            error = "Invalid AWS Bedrock API key"
     elif provider in ("together", "fireworks", "cohere", "perplexity", "huggingface", "replicate", "stability", "elevenlabs", "kimi", "metaai", "copilot", "glm"):
         valid = len(api_key) > 10
         if valid:
