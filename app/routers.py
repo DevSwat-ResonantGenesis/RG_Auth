@@ -1967,7 +1967,7 @@ async def _handle_oauth_callback(
     import json
     
     frontend_url = settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else "https://dev-swat.com"
-    dashboard_url = f"{frontend_url}/dashboard"
+    dashboard_url = f"{frontend_url}/"
     
     # Prepare auth data for frontend
     auth_data = {
