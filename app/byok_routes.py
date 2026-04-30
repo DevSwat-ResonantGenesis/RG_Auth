@@ -193,6 +193,12 @@ async def validate_user_api_key(
             models = ["deepseek-chat", "deepseek-coder"]
         else:
             error = "Invalid DeepSeek API key format. Should start with 'sk-'"
+    elif provider == "tokenrouter":
+        valid = api_key.startswith("sk-") and len(api_key) > 20
+        if valid:
+            models = ["anthropic/claude-opus-4.7", "openai/gpt-5.5", "google/gemini-3.1-pro-preview", "z-ai/glm-5.1", "qwen/qwen3.6-plus"]
+        else:
+            error = "Invalid TokenRouter API key format. Should start with 'sk-'"
     elif provider == "grok":
         valid = api_key.startswith("xai-") and len(api_key) > 20
         if valid:
@@ -378,7 +384,7 @@ async def get_available_providers(
     identity = await _get_identity_from_request(request, db)
     
     # Default providers available to all users
-    default_providers = ["openai", "anthropic", "google", "mistral", "groq"]
+    default_providers = ["tokenrouter", "openai", "anthropic", "google", "mistral", "groq"]
     
     # Get user's configured API keys
     result = await db.execute(
