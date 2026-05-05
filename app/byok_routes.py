@@ -196,7 +196,7 @@ async def validate_user_api_key(
     elif provider == "tokenrouter":
         valid = api_key.startswith("sk-") and len(api_key) > 20
         if valid:
-            models = ["anthropic/claude-opus-4.7", "openai/gpt-5.5", "google/gemini-3.1-pro-preview", "z-ai/glm-5.1", "qwen/qwen3.6-plus"]
+            models = ["google/gemini-3-flash-preview", "google/gemini-3.1-pro-preview", "openai/gpt-5.5", "anthropic/claude-opus-4.7", "deepseek/deepseek-v4-flash", "z-ai/glm-5.1", "qwen/qwen3.6-plus"]
         else:
             error = "Invalid TokenRouter API key format. Should start with 'sk-'"
     elif provider == "grok":
