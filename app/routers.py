@@ -1005,6 +1005,7 @@ async def desktop_callback(request: Request):
         return HTMLResponse("<h2>Invalid request</h2>", status_code=400)
 
     token = request.cookies.get(ACCESS_COOKIE)
+    refresh = request.cookies.get(REFRESH_COOKIE)
     if token:
         try:
             decoded = decode_access_token(token)
@@ -1012,6 +1013,8 @@ async def desktop_callback(request: Request):
             if identity.user_id:
                 # Valid session — redirect token to Electron's localhost server
                 callback = f"http://localhost:{port}/auth-callback?token={urllib.parse.quote(token)}"
+                if refresh:
+                    callback += f"&refresh_token={urllib.parse.quote(refresh)}"
                 return RedirectResponse(callback)
         except Exception:
             pass
@@ -1945,8 +1948,8 @@ async def _handle_oauth_callback(
     if desktop_port and desktop_port.isdigit():
         import urllib.parse
         from fastapi.responses import RedirectResponse as _Redir
-        callback_url = f"http://localhost:{desktop_port}/auth-callback?token={urllib.parse.quote(access_token)}"
-        logger.info(f"OAuth desktop redirect: sending token to localhost:{desktop_port}")
+        callback_url = f"http://localhost:{desktop_port}/auth-callback?token={urllib.parse.quote(access_token)}&refresh_token={urllib.parse.quote(refresh_plain)}"
+        logger.info(f"OAuth desktop redirect: sending token + refresh to localhost:{desktop_port}")
         ide_resp = _Redir(callback_url)
         # Set auth cookies so the website is also logged in
         _set_auth_cookies(
