@@ -419,11 +419,15 @@ async def get_user_api_keys_internal(
     """
     # Verify internal service call - check for internal header or localhost
     internal_key = request.headers.get("x-internal-service-key")
+    client_host = request.client.host if request.client else ""
+    forwarded_for = request.headers.get("x-forwarded-for", "")
     is_internal = (
         internal_key == settings.INTERNAL_SERVICE_KEY or
-        request.headers.get("x-forwarded-for", "").startswith("10.") or
-        request.headers.get("x-forwarded-for", "").startswith("172.") or
-        (request.client and request.client.host in ["127.0.0.1", "localhost"])
+        forwarded_for.startswith("10.") or
+        forwarded_for.startswith("172.") or
+        client_host in ["127.0.0.1", "localhost"] or
+        client_host.startswith("10.") or
+        client_host.startswith("172.")
     )
     
     if not is_internal and settings.ENVIRONMENT != "development":
