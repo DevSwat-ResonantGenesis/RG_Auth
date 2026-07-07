@@ -1,6 +1,6 @@
 # RG Auth
 
-> **Part of the [ResonantGenesis](https://dev-swat.com) platform** — Identity, access control, MFA, organizations, API keys, and cryptographic identity.
+> **Part of the [ResonantGenesis](https://resonant.dev-swat.com) platform** — Identity, access control, MFA, organizations, API keys, and cryptographic identity.
 
 [![Status: Production](https://img.shields.io/badge/Status-Production-brightgreen.svg)]()
 [![License: RG Source Available](https://img.shields.io/badge/License-RG%20Source%20Available-blue.svg)](LICENSE.txt)
@@ -95,7 +95,7 @@ git@github-devswat:DevSwat-ResonantGenesis/RG_Auth.git
 │  Sessions        ──→ GET  /auth/sessions                         │
 │  Agent settings  ──→ GET  /auth/settings/agents/*                │
 └───────────────────────────┬──────────────────────────────────────┘
-                            │ HTTPS (dev-swat.com)
+                            │ HTTPS (resonant.dev-swat.com)
                             ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │                    RG_Gateway (FastAPI proxy)                     │
@@ -496,8 +496,8 @@ All prefixed with `AUTH_` (via Pydantic `env_prefix`):
 | `AUTH_JWT_SECRET_KEY` | **REQUIRED in production** | JWT signing secret |
 | `AUTH_API_KEY_SALT` | **REQUIRED in production** | Salt for API key hashing |
 | `AUTH_INTERNAL_SERVICE_KEY` | **REQUIRED in production** | Service-to-service auth |
-| `AUTH_FRONTEND_URL` | `https://dev-swat.com` | For OAuth callbacks and email links |
-| `AUTH_COOKIE_DOMAIN` | *(empty = same-origin)* | Set to `.dev-swat.com` in production |
+| `AUTH_FRONTEND_URL` | `https://resonant.dev-swat.com` | For OAuth callbacks and email links |
+| `AUTH_COOKIE_DOMAIN` | *(empty = same-origin)* | Set to `.resonant.dev-swat.com` in production |
 | `AUTH_COOKIE_SECURE` | `true` | HTTPS-only cookies |
 | `AUTH_ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | JWT access token lifetime |
 | `AUTH_REFRESH_TOKEN_EXPIRE_DAYS` | `30` | Refresh token lifetime |
@@ -558,4 +558,4 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 ---
 
-**Organization**: [DevSwat-ResonantGenesis](https://github.com/DevSwat-ResonantGenesis) | **Platform**: [dev-swat.com](https://dev-swat.com)
+**Organization**: [DevSwat-ResonantGenesis](https://github.com/DevSwat-ResonantGenesis) | **Platform**: [resonant.dev-swat.com](https://resonant.dev-swat.com)

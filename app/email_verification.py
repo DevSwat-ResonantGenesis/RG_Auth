@@ -139,7 +139,7 @@ async def resend_verification_email(
     plain_token = await create_verification_token(user, db)
     
     # Build verification URL
-    frontend_url = getattr(settings, 'FRONTEND_URL', 'https://dev-swat.com')
+    frontend_url = getattr(settings, 'FRONTEND_URL', 'https://resonant.dev-swat.com')
     verification_url = f"{frontend_url}/verify-email?token={plain_token}"
     
     # Send email
