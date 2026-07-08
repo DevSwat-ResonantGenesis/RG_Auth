@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 from .config import settings
 from .db import get_db
+from .economic_integration import create_user_economic_state, EconomicIntegrationError
 from .models import Agent, Organization, OrgMembership, RefreshToken, User, UserApiKey
 from .identity import Identity
 from .security import (
@@ -260,22 +261,21 @@ async def register(
     # ============================================
     # CRITICAL: Create UserEconomicState in billing_service
     # ============================================
-    # TODO: Re-enable when billing service has /economic-state/ endpoint
-    # try:
-    #     economic_state = await create_user_economic_state(
-    #         user_id=user.id,
-    #         org_id=org.id,
-    #         tier="developer",  # Default tier
-    #         subscription_source="internal",
-    #         is_dev_override=False,
-    #     )
-    # except EconomicIntegrationError as e:
-    #     # CRITICAL: Rollback the transaction if economic state creation fails
-    #     await db.rollback()
-    #     raise HTTPException(
-    #         status_code=503,
-    #         detail=f"Registration failed: could not create economic state. {e}"
-    #     )
+    try:
+        await create_user_economic_state(
+            user_id=user.id,
+            org_id=org.id,
+            tier="developer",  # Default tier
+            subscription_source="internal",
+            is_dev_override=False,
+        )
+    except EconomicIntegrationError as e:
+        # Non-fatal: the 7-day unlimited_credits trial + CreditManager's
+        # lazy-create-on-first-deduction fallback both still work without this
+        # row, so don't block signup on billing_service being unreachable.
+        # It just means /auth/verify's plan-tier lookup falls back to a
+        # default plan until this succeeds (e.g. on next login retry).
+        logger.error(f"Failed to create economic state for user {user.id}: {e}")
     # ============================================
     
     await db.commit()

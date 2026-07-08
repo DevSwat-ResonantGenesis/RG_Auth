@@ -335,40 +335,66 @@ async def get_dashboard_users(
 # OWNER SETTINGS ENDPOINTS
 # ============================================
 
-# In-memory settings storage (in production, use database or config service)
+# In-memory storage for settings that have no other home (in production, use a
+# database or config service). Pricing fields are intentionally NOT stored here
+# — they're fetched live from billing_service's pricing.yaml (the canonical
+# source) on every GET so this panel can't drift out of sync with real pricing.
 _platform_settings = {
-    "credit_rate": 0.001,
-    "developer_credits": 1000,
-    "plus_credits": 50000,
-    "plus_price": 49,
-    "topup_price": 8,
-    "topup_amount": 10000,
     "maintenance_mode": False,
     "signups_enabled": True,
 }
+
+
+async def _live_pricing_fields() -> dict:
+    """Fetch developer/plus pricing straight from billing_service's pricing.yaml."""
+    import httpx
+
+    billing_base = getattr(settings, "BILLING_URL", "http://billing_service:8000").rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{billing_base}/billing/pricing")
+        resp.raise_for_status()
+        config = resp.json()
+        plans = config.get("plans", {})
+        developer = plans.get("developer", {})
+        plus = plans.get("plus", {})
+        return {
+            "credit_rate": config.get("credit_rate", {}).get("value", 0.001),
+            "developer_price": developer.get("price", {}).get("monthly"),
+            "developer_credits": developer.get("credits", {}).get("included"),
+            "plus_price": plus.get("price", {}).get("monthly"),
+            "plus_credits": plus.get("credits", {}).get("included"),
+            "topup_price": plus.get("credits", {}).get("topup_price"),
+            "topup_amount": plus.get("credits", {}).get("topup_amount"),
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Failed to fetch live pricing for owner settings: {e}")
+        return {}
+
 
 @router.get("/settings")
 async def get_platform_settings(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    """Get current platform settings."""
+    """Get current platform settings (operational toggles + live pricing snapshot)."""
     await validate_owner_token(credentials)
-    return _platform_settings
+    return {**_platform_settings, **await _live_pricing_fields()}
 
 @router.post("/settings")
 async def save_platform_settings(
     settings: dict,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    """Save platform settings."""
+    """Save operational platform settings. Pricing is edited in billing_service's
+    pricing.yaml, not here — pricing keys in the payload are ignored."""
     await validate_owner_token(credentials)
-    
-    # Update settings
+
     for key, value in settings.items():
         if key in _platform_settings:
             _platform_settings[key] = value
-    
-    return {"status": "saved", "settings": _platform_settings}
+
+    return {"status": "saved", "settings": {**_platform_settings, **await _live_pricing_fields()}}
 
 
 # ============================================
