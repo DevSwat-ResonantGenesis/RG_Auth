@@ -284,7 +284,7 @@ async def register(
     from .email_verification import create_verification_token, send_verification_email
     try:
         plain_token = await create_verification_token(user, db)
-        frontend_url = getattr(settings, 'FRONTEND_URL', 'https://resonant.dev-swat.com')
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'https://dev-swat.com')
         verification_url = f"{frontend_url}/verify-email?token={plain_token}"
         email_sent = await send_verification_email(user.email, verification_url, user.full_name)
         if email_sent:
@@ -1553,7 +1553,7 @@ async def oauth_callback_compatibility(
     from fastapi.responses import RedirectResponse as _Redirect
     from .oauth_redis import get_oauth_state
 
-    frontend_url = _oauth_manager.frontend_url  # e.g. https://resonant.dev-swat.com
+    frontend_url = _oauth_manager.frontend_url  # e.g. https://dev-swat.com
 
     if error:
         return _Redirect(
@@ -1969,7 +1969,7 @@ async def _handle_oauth_callback(
     from fastapi.responses import HTMLResponse
     import json
     
-    frontend_url = settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else "https://resonant.dev-swat.com"
+    frontend_url = settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else "https://dev-swat.com"
     dashboard_url = f"{frontend_url}/"
     
     # Prepare auth data for frontend

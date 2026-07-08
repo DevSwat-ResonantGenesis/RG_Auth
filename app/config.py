@@ -53,18 +53,18 @@ class Settings(BaseSettings):
     # Option 1: SMTP (Google Workspace, etc.)
     SMTP_HOST: str = ""  # smtp.gmail.com for Google Workspace
     SMTP_PORT: int = 587
-    SMTP_USER: str = ""  # info@resonant.dev-swat.com
+    SMTP_USER: str = ""  # info@dev-swat.com
     SMTP_PASSWORD: str = ""  # App password from Google
     
     # Option 2: SendGrid API
     SENDGRID_API_KEY: str = ""
     
     # Email sender settings
-    EMAIL_FROM_ADDRESS: str = "info@resonant.dev-swat.com"
+    EMAIL_FROM_ADDRESS: str = "info@dev-swat.com"
     EMAIL_FROM_NAME: str = "DevSwat"
     
     # Frontend URL for email links and OAuth callbacks
-    FRONTEND_URL: str = os.getenv("AUTH_FRONTEND_URL", "https://resonant.dev-swat.com")
+    FRONTEND_URL: str = os.getenv("AUTH_FRONTEND_URL", "https://dev-swat.com")
 
     REQUIRE_EMAIL_VERIFICATION: bool = True
     

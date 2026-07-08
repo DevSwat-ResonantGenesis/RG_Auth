@@ -420,7 +420,7 @@ class OAuthManager:
     """
     
     def __init__(self, frontend_url: str = None):
-        self.frontend_url = frontend_url or os.getenv("FRONTEND_URL", os.getenv("AUTH_FRONTEND_URL", "https://resonant.dev-swat.com"))
+        self.frontend_url = frontend_url or os.getenv("FRONTEND_URL", os.getenv("AUTH_FRONTEND_URL", "https://dev-swat.com"))
     
     def get_providers(self) -> List[Dict[str, Any]]:
         """Get list of available OAuth providers with display info."""

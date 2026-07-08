@@ -122,7 +122,7 @@ async def forgot_password(
         await db.commit()
         
         # Build reset URL
-        frontend_url = settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else "https://resonant.dev-swat.com"
+        frontend_url = settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else "https://dev-swat.com"
         reset_url = f"{frontend_url}/reset-password?token={reset_token}"
         
         # Send password reset email
