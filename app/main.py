@@ -25,6 +25,8 @@ try:
     from .api_keys_routes import router as api_keys_router
     from .agent_settings_routes import router as agent_settings_router
     from .ssh_hosts_routes import router as ssh_hosts_router
+    from .workspaces_routes import router as workspaces_router
+    from .workspace_tokens_routes import router as workspace_tokens_router
     print("✅ Real auth components loaded")
 except ImportError as e:
     print(f"❌ Import error: {e}")
@@ -42,6 +44,8 @@ except ImportError as e:
     api_keys_router = None
     agent_settings_router = None
     ssh_hosts_router = None
+    workspaces_router = None
+    workspace_tokens_router = None
 
 # Single service entrypoint
 app = FastAPI(
@@ -95,6 +99,8 @@ for _name, _router in [
     ("api-keys", api_keys_router),
     ("agent-settings", agent_settings_router),
     ("ssh-hosts", ssh_hosts_router),
+    ("workspaces", workspaces_router),
+    ("workspace-tokens", workspace_tokens_router),
 ]:
     if _router:
         app.include_router(_router, tags=[_name])

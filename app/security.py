@@ -73,6 +73,16 @@ def generate_api_key() -> Tuple[str, str, str]:
     return api_key, prefix, hash_token(api_key)
 
 
+def generate_workspace_token() -> Tuple[str, str, str]:
+    """Generate a scoped workspace access token (RGW- prefix, distinct from
+    the RG- org-level API keys generate_api_key produces above - see
+    WorkspaceAccessToken's docstring for why these are a separate type)."""
+    prefix = secrets.token_hex(4)
+    secret = secrets.token_urlsafe(32)
+    token = f"RGW-{prefix}.{secret}"
+    return token, prefix, hash_token(token)
+
+
 def create_access_token(identity: Identity, token_version: int, user_crypto_data: dict = None) -> str:
     """Create a JWT access token with Identity claims and crypto hashes."""
     expire = _utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)

@@ -222,6 +222,59 @@ class UserSshHost(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class Workspace(Base):
+    """A persistent, titled project identity shared across the IDE,
+    sandboxed terminal, Builder, and Agent OS.
+
+    Its `id` IS the `project_id` string those other services already use
+    ad-hoc (RG_Memory Hash Sphere file metadata, RG_Terminal_Sandbox's
+    terminal_id, RG_Agent_Engine's project_builder) - having a real row
+    here (rather than an unminted UUID) is what lets a user close their
+    laptop, log out, log back in on a different device, and reconnect to
+    the exact same terminal container and file set for "the same project".
+    """
+    __tablename__ = "workspaces"
+    __table_args__ = (
+        Index("ix_workspaces_user_id", "user_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False)
+    title = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_active_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class WorkspaceAccessToken(Base):
+    """A scoped credential minted for one workspace, injected into that
+    workspace's sandboxed terminal container as RG_WORKSPACE_TOKEN so
+    Claude Code CLI can call the platform's own API (create/update/delete
+    agents in Agent OS, create/update Builder projects) on the owning
+    user's behalf.
+
+    Deliberately NOT the same thing as RG_Auth's org-level `ApiKey` (RG-
+    prefixed): those are all-or-nothing and their `scopes` field is never
+    actually enforced anywhere in the codebase. This token's `scopes` ARE
+    enforced (see RG_Agent_Engine's scope_check.py) - v1 ships with a
+    fixed ["agents:*", "builder:*"] scope list, full CRUD, per explicit
+    product decision, not because enforcement can't narrow it further.
+    """
+    __tablename__ = "workspace_access_tokens"
+    __table_args__ = (
+        Index("ix_workspace_access_tokens_workspace_id", "workspace_id"),
+        Index("ix_workspace_access_tokens_prefix", "prefix", unique=True),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False)
+    workspace_id = Column(UUID(as_uuid=True), nullable=False)
+    prefix = Column(String(16), nullable=False)
+    hashed_secret = Column(String(255), nullable=False)
+    scopes = Column(JSON, nullable=False, default=lambda: ["agents:*", "builder:*"])
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class PasswordResetToken(Base):
     """Password reset token storage for secure password recovery."""
     __tablename__ = "password_reset_tokens"
