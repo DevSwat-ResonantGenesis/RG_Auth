@@ -24,6 +24,7 @@ try:
     from .byok_routes import router as byok_router
     from .api_keys_routes import router as api_keys_router
     from .agent_settings_routes import router as agent_settings_router
+    from .ssh_hosts_routes import router as ssh_hosts_router
     print("✅ Real auth components loaded")
 except ImportError as e:
     print(f"❌ Import error: {e}")
@@ -40,6 +41,7 @@ except ImportError as e:
     byok_router = None
     api_keys_router = None
     agent_settings_router = None
+    ssh_hosts_router = None
 
 # Single service entrypoint
 app = FastAPI(
@@ -92,6 +94,7 @@ for _name, _router in [
     ("byok", byok_router),
     ("api-keys", api_keys_router),
     ("agent-settings", agent_settings_router),
+    ("ssh-hosts", ssh_hosts_router),
 ]:
     if _router:
         app.include_router(_router, tags=[_name])

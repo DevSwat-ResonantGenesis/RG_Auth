@@ -191,6 +191,37 @@ class UserApiKey(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+class UserSshHost(Base):
+    """A user-registered server/laptop the sandboxed IDE terminal (Claude
+    Code CLI) is allowed to SSH into.
+
+    We never store the user's server credentials at all - RG_Terminal_Sandbox
+    generates an SSH keypair *inside the user's own persistent container* the
+    first time they register a host; only the public half is ever seen
+    outside that container (surfaced once via Gateway for the user to paste
+    into their own server's ~/.ssh/authorized_keys). This table is purely
+    "which host+port may this user's sandbox reach", used to template that
+    user's per-session Squid egress sidecar (see RG_Terminal_Sandbox's
+    docker_manager.create_egress_proxy).
+
+    One row per user by design (see the unique index below) - this is meant
+    to stay a single, narrow, opt-in exception, not a general egress
+    allowlist.
+    """
+    __tablename__ = "user_ssh_hosts"
+    __table_args__ = (
+        Index("ix_user_ssh_hosts_user_id", "user_id", unique=True),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False)
+    host = Column(String(255), nullable=False)
+    port = Column(Integer, nullable=False, default=22)
+    label = Column(String(255), nullable=True)
+    public_key_fingerprint = Column(String(128), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class PasswordResetToken(Base):
     """Password reset token storage for secure password recovery."""
     __tablename__ = "password_reset_tokens"
