@@ -11,19 +11,18 @@ from alembic import context
 # Import your models
 from app.db import Base
 from app import models  # noqa: F401 - ensures models are registered
+from app.config import get_database_url
 
 # this is the Alembic Config object
 config = context.config
 
-# Override sqlalchemy.url with environment variables
-db_user = os.getenv("AUTH_DB_USER", "auth_user")
-db_password = os.getenv("AUTH_DB_PASSWORD", "auth_pass")
-db_host = os.getenv("AUTH_DB_HOST", "auth_db")
-db_port = os.getenv("AUTH_DB_PORT", "5432")
-db_name = os.getenv("AUTH_DB_NAME", "auth_db")
-
-database_url = f"postgresql+asyncpg://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
-config.set_main_option("sqlalchemy.url", database_url)
+# Reuse the app's own DB URL resolution (prefers AUTH_DATABASE_URL, the
+# managed-Postgres connection string every environment actually sets) -
+# this used to reconstruct a URL from AUTH_DB_USER/AUTH_DB_HOST/etc, which
+# are never set anywhere, silently falling back to a literal "auth_db"
+# hostname that doesn't exist in the managed-Postgres deployment. Alembic
+# could never connect against prod through that path.
+config.set_main_option("sqlalchemy.url", get_database_url())
 
 # Interpret the config file for Python logging
 if config.config_file_name is not None:
