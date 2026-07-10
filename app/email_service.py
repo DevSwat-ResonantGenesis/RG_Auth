@@ -222,11 +222,19 @@ async def _send_via_smtp(
         
         # Send via SMTP (run in thread to not block)
         def send_sync():
-            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+            # No timeout here defaults to blocking/no-limit - when the
+            # network can't route to the SMTP host at all (as opposed to an
+            # active refusal), this can take *minutes* to fail instead of
+            # erroring immediately, which blew the request well past the
+            # gateway's 60s timeout and made signup hang from the caller's
+            # point of view. Every other outbound call in registration
+            # (Hash Sphere, blockchain, billing) already has an explicit
+            # timeout; this was the one that didn't.
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
                 server.starttls()
                 server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                 server.send_message(msg)
-        
+
         # Run in executor to avoid blocking
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, send_sync)
