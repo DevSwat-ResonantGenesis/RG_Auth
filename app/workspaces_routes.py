@@ -134,7 +134,7 @@ async def upsert_workspace_internal(
     result = await db.execute(select(Workspace).where(Workspace.id == payload.id))
     workspace = result.scalar_one_or_none()
     if workspace:
-        if workspace.user_id != payload.user_id:
+        if str(workspace.user_id) != payload.user_id:
             raise HTTPException(status_code=409, detail="Workspace id owned by a different user")
         workspace.last_active_at = datetime.utcnow()
         await db.commit()
