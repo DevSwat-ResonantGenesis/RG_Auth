@@ -12,11 +12,28 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .config import settings
 from .db import get_db
 from .deps import _get_identity_from_request
 from .models import Workspace
 
 router = APIRouter()
+
+
+def _require_internal(request: Request) -> None:
+    internal_key = request.headers.get("x-internal-service-key")
+    client_host = request.client.host if request.client else ""
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    is_internal = (
+        internal_key == settings.INTERNAL_SERVICE_KEY or
+        forwarded_for.startswith("10.") or
+        forwarded_for.startswith("172.") or
+        client_host in ["127.0.0.1", "localhost"] or
+        client_host.startswith("10.") or
+        client_host.startswith("172.")
+    )
+    if not is_internal and settings.ENVIRONMENT != "development":
+        raise HTTPException(status_code=403, detail="Internal endpoint - access denied")
 
 
 class WorkspaceCreate(BaseModel):
@@ -93,3 +110,39 @@ async def delete_workspace(workspace_id: str, request: Request, db: AsyncSession
     await db.delete(workspace)
     await db.commit()
     return {"deleted": True}
+
+
+class InternalWorkspaceUpsert(BaseModel):
+    id: str
+    user_id: str
+    title: str = Field(..., min_length=1, max_length=255)
+
+
+@router.post("/auth/internal/workspaces/upsert")
+async def upsert_workspace_internal(
+    payload: InternalWorkspaceUpsert,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Called by RG_Agent_Engine's project_builder when a build creates a
+    project, so it shows up as a Workspace (IDE/terminal/Builder/Agent OS
+    all key off the same id). project_builder mints its project_id as a
+    UUID specifically so it can be used as this row's primary key directly.
+    """
+    _require_internal(request)
+
+    result = await db.execute(select(Workspace).where(Workspace.id == payload.id))
+    workspace = result.scalar_one_or_none()
+    if workspace:
+        if workspace.user_id != payload.user_id:
+            raise HTTPException(status_code=409, detail="Workspace id owned by a different user")
+        workspace.last_active_at = datetime.utcnow()
+        await db.commit()
+        await db.refresh(workspace)
+        return _to_response(workspace)
+
+    workspace = Workspace(id=payload.id, user_id=payload.user_id, title=payload.title)
+    db.add(workspace)
+    await db.commit()
+    await db.refresh(workspace)
+    return _to_response(workspace)
