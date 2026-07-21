@@ -886,7 +886,7 @@ async def verify(payload: VerifyRequest, db: AsyncSession = Depends(get_db)):
                     data = resp.json() or {}
                     headers = data.get("headers", {}) if isinstance(data, dict) else {}
                     tier = (headers.get("X-Subscription-Tier") or "").strip().lower()
-                    logger.info(f"Auth verify: billing service returned tier={tier} for user={user_id}")
+                    logger.warning(f"Auth verify: billing service returned tier={tier} for user={user_id}")
                     if tier in {"developer", "plus", "enterprise"}:
                         plan = tier
             except Exception as e:
@@ -895,7 +895,7 @@ async def verify(payload: VerifyRequest, db: AsyncSession = Depends(get_db)):
 
         if plan is None:
             raw_plan = (decoded.get("plan") or "").strip().lower()
-            logger.info(f"Auth verify: using fallback plan from token: raw_plan={raw_plan}")
+            logger.warning(f"Auth verify: using fallback plan from token: raw_plan={raw_plan}")
             if raw_plan in {"developer", "plus", "enterprise"}:
                 plan = raw_plan
             elif raw_plan in {"free", "starter"}:
@@ -905,7 +905,7 @@ async def verify(payload: VerifyRequest, db: AsyncSession = Depends(get_db)):
             else:
                 plan = "free"
         
-        logger.info(f"Auth verify: final plan={plan} for user={user_id}")
+        logger.warning(f"Auth verify: final plan={plan} for user={user_id}")
         
         # Role is determined by OrgMembership, NOT by is_superuser flag.
         # is_superuser only grants owner dashboard access (validated in owner_auth.py).
