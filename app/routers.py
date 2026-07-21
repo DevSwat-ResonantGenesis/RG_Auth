@@ -929,6 +929,9 @@ async def verify(payload: VerifyRequest, db: AsyncSession = Depends(get_db)):
             "crypto_hash": getattr(user, "crypto_hash", None) if user else None,
             "user_hash": getattr(user, "user_hash", None) if user else None,
             "universe_id": getattr(user, "universe_id", None) if user else None,
+            "email": getattr(user, "email", None) if user else None,
+            "full_name": getattr(user, "full_name", None) if user else None,
+            "name": getattr(user, "name", None) if user else None,
         }
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
