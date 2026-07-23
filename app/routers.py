@@ -872,41 +872,39 @@ async def verify(payload: VerifyRequest, db: AsyncSession = Depends(get_db)):
 
         normalized_role = _normalize_role(role, is_superuser=is_superuser)
 
-        # Determine plan from ROLE (RBAC is authoritative source).
-        # Platform rules determine plan assignment, NOT billing service.
-        # Billing service is for credits/usage tracking only.
-        # Owner role can have any plan (developer/plus/enterprise) based on billing service.
-        if normalized_role in ("platform_dev", "platform_owner"):
-            plan = "enterprise"
-        elif normalized_role == "owner":
-            # Owner role: check billing service for plan (can be developer/plus/enterprise)
-            if user_id:
-                try:
-                    billing_base = getattr(settings, "BILLING_URL", "http://billing_service:8000").rstrip("/")
-                    async with httpx.AsyncClient(timeout=2.0) as client:
-                        resp = await client.get(f"{billing_base}/economic-state/{user_id}/headers")
-                    if resp.status_code == 200:
-                        data = resp.json() or {}
-                        headers = data.get("headers", {}) if isinstance(data, dict) else {}
-                        tier = (headers.get("X-Subscription-Tier") or "").strip().lower()
-                        logger.warning(f"Auth verify: billing service returned tier={tier} for owner user={user_id}")
-                        if tier in {"developer", "plus", "enterprise"}:
-                            plan = tier
-                        else:
-                            plan = "developer"  # default for owner if no billing
-                except Exception as e:
-                    logger.warning(f"Auth verify: failed to get plan from billing service for owner user={user_id}: {e}")
-                    plan = "developer"  # default for owner if billing fails
+        # Determine plan: billing service FIRST (paid subscribers get what they paid for),
+        # then role-based fallback if no billing record.
+        plan: Optional[str] = None
+
+        # Check billing service for active subscription (all users)
+        if user_id:
+            try:
+                billing_base = getattr(settings, "BILLING_URL", "http://billing_service:8000").rstrip("/")
+                async with httpx.AsyncClient(timeout=2.0) as client:
+                    resp = await client.get(f"{billing_base}/economic-state/{user_id}/headers")
+                if resp.status_code == 200:
+                    data = resp.json() or {}
+                    headers = data.get("headers", {}) if isinstance(data, dict) else {}
+                    tier = (headers.get("X-Subscription-Tier") or "").strip().lower()
+                    logger.warning(f"Auth verify: billing service returned tier={tier} for user={user_id}")
+                    if tier in {"developer", "plus", "enterprise"}:
+                        plan = tier
+            except Exception as e:
+                logger.warning(f"Auth verify: failed to get plan from billing service for user={user_id}: {e}")
+                plan = None
+
+        # Role-based fallback if no billing record
+        if plan is None:
+            if normalized_role in ("platform_dev", "platform_owner"):
+                plan = "enterprise"
+            elif normalized_role == "org_admin":
+                plan = "plus"
+            elif normalized_role == "user":
+                plan = "developer"
+            elif normalized_role in ("finance", "compliance", "ml_engineer"):
+                plan = "plus"
             else:
-                plan = "developer"  # default for owner if no user_id
-        elif normalized_role == "org_admin":
-            plan = "plus"
-        elif normalized_role == "user":
-            plan = "developer"
-        elif normalized_role in ("finance", "compliance", "ml_engineer"):
-            plan = "plus"
-        else:
-            plan = "developer"
+                plan = "developer"
 
         logger.warning(f"Auth verify: final plan={plan} for user={user_id} (role-based assignment)")
         
