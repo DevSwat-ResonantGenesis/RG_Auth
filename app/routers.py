@@ -875,8 +875,30 @@ async def verify(payload: VerifyRequest, db: AsyncSession = Depends(get_db)):
         # Determine plan from ROLE (RBAC is authoritative source).
         # Platform rules determine plan assignment, NOT billing service.
         # Billing service is for credits/usage tracking only.
-        if normalized_role in ("platform_dev", "platform_owner", "owner"):
+        # Owner role can have any plan (developer/plus/enterprise) based on billing service.
+        if normalized_role in ("platform_dev", "platform_owner"):
             plan = "enterprise"
+        elif normalized_role == "owner":
+            # Owner role: check billing service for plan (can be developer/plus/enterprise)
+            if user_id:
+                try:
+                    billing_base = getattr(settings, "BILLING_URL", "http://billing_service:8000").rstrip("/")
+                    async with httpx.AsyncClient(timeout=2.0) as client:
+                        resp = await client.get(f"{billing_base}/economic-state/{user_id}/headers")
+                    if resp.status_code == 200:
+                        data = resp.json() or {}
+                        headers = data.get("headers", {}) if isinstance(data, dict) else {}
+                        tier = (headers.get("X-Subscription-Tier") or "").strip().lower()
+                        logger.warning(f"Auth verify: billing service returned tier={tier} for owner user={user_id}")
+                        if tier in {"developer", "plus", "enterprise"}:
+                            plan = tier
+                        else:
+                            plan = "developer"  # default for owner if no billing
+                except Exception as e:
+                    logger.warning(f"Auth verify: failed to get plan from billing service for owner user={user_id}: {e}")
+                    plan = "developer"  # default for owner if billing fails
+            else:
+                plan = "developer"  # default for owner if no user_id
         elif normalized_role == "org_admin":
             plan = "plus"
         elif normalized_role == "user":
