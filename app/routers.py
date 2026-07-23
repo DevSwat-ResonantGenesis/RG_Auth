@@ -872,40 +872,21 @@ async def verify(payload: VerifyRequest, db: AsyncSession = Depends(get_db)):
 
         normalized_role = _normalize_role(role, is_superuser=is_superuser)
 
-        # Determine plan from billing_service (authoritative) with safe fallback.
-        # Returned plan must match canonical tiers used across services: developer/plus/enterprise.
-        # Only platform_dev role gets auto-enterprise, NOT is_superuser (superuser is for owner dashboard only)
-        plan: Optional[str] = "enterprise" if normalized_role in ("platform_dev", "platform_owner") else None
+        # Determine plan from ROLE (RBAC is authoritative source).
+        # Platform rules determine plan assignment, NOT billing service.
+        # Billing service is for credits/usage tracking only.
+        if normalized_role in ("platform_dev", "platform_owner", "owner"):
+            plan = "enterprise"
+        elif normalized_role == "org_admin":
+            plan = "plus"
+        elif normalized_role == "user":
+            plan = "developer"
+        elif normalized_role in ("finance", "compliance", "ml_engineer"):
+            plan = "plus"
+        else:
+            plan = "developer"
 
-        if plan is None and user_id:
-            try:
-                billing_base = getattr(settings, "BILLING_URL", "http://billing_service:8000").rstrip("/")
-                async with httpx.AsyncClient(timeout=2.0) as client:
-                    resp = await client.get(f"{billing_base}/economic-state/{user_id}/headers")
-                if resp.status_code == 200:
-                    data = resp.json() or {}
-                    headers = data.get("headers", {}) if isinstance(data, dict) else {}
-                    tier = (headers.get("X-Subscription-Tier") or "").strip().lower()
-                    logger.warning(f"Auth verify: billing service returned tier={tier} for user={user_id}")
-                    if tier in {"developer", "plus", "enterprise"}:
-                        plan = tier
-            except Exception as e:
-                logger.warning(f"Auth verify: failed to get plan from billing service for user={user_id}: {e}")
-                plan = None
-
-        if plan is None:
-            raw_plan = (decoded.get("plan") or "").strip().lower()
-            logger.warning(f"Auth verify: using fallback plan from token: raw_plan={raw_plan}")
-            if raw_plan in {"developer", "plus", "enterprise"}:
-                plan = raw_plan
-            elif raw_plan in {"free", "starter"}:
-                plan = "free"
-            elif raw_plan in {"pro"}:
-                plan = "plus"
-            else:
-                plan = "free"
-        
-        logger.warning(f"Auth verify: final plan={plan} for user={user_id}")
+        logger.warning(f"Auth verify: final plan={plan} for user={user_id} (role-based assignment)")
         
         # Role is determined by OrgMembership, NOT by is_superuser flag.
         # is_superuser only grants owner dashboard access (validated in owner_auth.py).
