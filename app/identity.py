@@ -26,6 +26,7 @@ class Identity:
     scopes: List[str] = field(default_factory=list)
     api_key_id: Optional[UUID] = None
     auth_method: str = "jwt"  # jwt | api_key | internal
+    is_superuser: bool = False  # Superuser flag for owner dashboard access
 
     def has_scope(self, scope: str) -> bool:
         if "*" in self.scopes:
@@ -68,6 +69,7 @@ class Identity:
             "scopes": self.scopes,
             "api_key_id": str(self.api_key_id) if self.api_key_id else None,
             "auth_method": self.auth_method,
+            "is_superuser": self.is_superuser,
         }
 
     @staticmethod
@@ -84,4 +86,5 @@ class Identity:
             scopes=list(claims.get("scopes", [])),
             api_key_id=_parse(claims.get("api_key_id")),
             auth_method=claims.get("auth_method", "jwt"),
+            is_superuser=claims.get("is_superuser", False),
         )

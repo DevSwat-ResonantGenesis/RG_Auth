@@ -658,6 +658,7 @@ async def login(
         scopes=[],
         api_key_id=None,
         auth_method="jwt",
+        is_superuser=user.is_superuser,
     )
 
     # Create tokens
