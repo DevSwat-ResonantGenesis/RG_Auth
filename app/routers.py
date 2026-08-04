@@ -689,7 +689,7 @@ async def login(
     # Plan comes from subscription, not from superuser flag
     plan = "free"
     
-    return LoginResponse(
+    login_response = LoginResponse(
         access_token=access_token,
         org_id=identity.org_id,
         role=identity.role,
@@ -702,6 +702,10 @@ async def login(
             "is_superuser": user.is_superuser,
         }
     )
+    
+    logger.info(f"Login response for {user.email}: role={identity.role}, is_superuser={user.is_superuser}, org_id={identity.org_id}")
+    
+    return login_response
 
 
 @router.post("/auth/refresh", response_model=RefreshResponse)
