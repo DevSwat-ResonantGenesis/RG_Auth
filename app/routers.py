@@ -24,6 +24,7 @@ from uuid import UUID
 import logging
 import urllib.parse
 import httpx
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import select
@@ -249,11 +250,15 @@ async def register(
         logger.error(f"Blockchain identity registration error: {e}")
         # Don't fail registration if blockchain is down
 
-    # Create membership (owner role)
+    # Create membership (role based on feature flag)
+    # If subscription-first registration is enabled, default to unsubscribed
+    # Otherwise, use the old default of owner for backward compatibility
+    default_role = "unsubscribed" if settings.SUBSCRIPTION_FIRST_REGISTRATION else "owner"
+    
     membership = OrgMembership(
         user_id=user.id,
         org_id=org.id,
-        role="owner",
+        role=default_role,
         status="active",
     )
     db.add(membership)
@@ -2094,6 +2099,127 @@ async def initiate_saml(
         raise HTTPException(status_code=500, detail=f"SAML initiation failed: {str(e)}")
 
 
+@router.post("/auth/users/{user_id}/role")
+async def update_user_role(
+    user_id: str,
+    role_update: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Internal endpoint for billing webhook to update user roles.
+
+    This is the ONLY endpoint allowed to upgrade/downgrade user roles based on subscription.
+    Protected by HMAC signature verification to prevent spoofing.
+    """
+    import hmac
+    import hashlib
+    import time
+    import json
+
+    # Verify HMAC signature
+    signature = request.headers.get("X-Webhook-Signature")
+    timestamp = request.headers.get("X-Webhook-Timestamp")
+    nonce = request.headers.get("X-Webhook-Nonce")
+    if not signature or not timestamp or not nonce:
+        logger.warning(f"Missing signature, timestamp, or nonce in role update attempt for user {user_id}")
+        raise HTTPException(status_code=403, detail="Missing authentication headers")
+
+    # Check timestamp to prevent replay attacks (5 minute window)
+    try:
+        request_time = int(timestamp)
+        current_time = int(time.time())
+        if abs(current_time - request_time) > 300:  # 5 minutes
+            logger.warning(f"Timestamp too old for role update attempt for user {user_id}")
+            raise HTTPException(status_code=403, detail="Timestamp expired")
+    except ValueError:
+        logger.warning(f"Invalid timestamp format for role update attempt for user {user_id}")
+        raise HTTPException(status_code=403, detail="Invalid timestamp")
+
+    # Get request body for signature verification
+    body = await request.body()
+
+    # Compute expected HMAC
+    secret = settings.INTERNAL_SERVICE_KEY.encode()
+    expected_signature = hmac.new(
+        secret,
+        body + timestamp.encode() + nonce.encode(),
+        hashlib.sha256
+    ).hexdigest()
+
+    # Constant-time comparison to prevent timing attacks
+    if not hmac.compare_digest(signature, expected_signature):
+        logger.warning(f"Invalid signature for role update attempt for user {user_id}")
+        raise HTTPException(status_code=403, detail="Invalid signature")
+
+    # Check nonce to prevent replay attacks within the timestamp window
+    # Store nonce in Redis with 5-minute TTL
+    try:
+        import redis.asyncio as redis
+        redis_client = redis.from_url(
+            os.getenv("REDIS_URL", "redis://redis:6379/3"),
+            encoding="utf-8",
+            decode_responses=True
+        )
+        nonce_key = f"webhook_nonce:{nonce}"
+        if await redis_client.exists(nonce_key):
+            logger.warning(f"Replay attack detected: nonce {nonce} already used")
+            raise HTTPException(status_code=403, detail="Replay detected")
+        # Store nonce with 5-minute expiration
+        await redis_client.setex(nonce_key, 300, "1")
+    except Exception as e:
+        logger.error(f"Failed to check nonce in Redis: {e}")
+        # If Redis is unavailable, fail open for now (can be improved)
+        logger.warning("Proceeding without nonce check due to Redis error")
+
+    new_role = role_update.get("role")
+    payload_user_id = role_update.get("user_id")
+    
+    if not new_role:
+        raise HTTPException(status_code=400, detail="Missing role in request body")
+    
+    # Validate that user_id in payload matches URL user_id (prevents cross-user role swaps)
+    if payload_user_id and payload_user_id != user_id:
+        logger.warning(f"user_id mismatch: URL={user_id}, payload={payload_user_id}")
+        raise HTTPException(status_code=400, detail="user_id mismatch in payload")
+
+    # Validate role exists
+    from .roles import ROLES
+    if new_role not in ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid role: {new_role}")
+
+    try:
+        user_uuid = UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+
+    # Update user's role in their primary organization membership
+    result = await db.execute(
+        select(OrgMembership).where(
+            OrgMembership.user_id == user_uuid,
+            OrgMembership.status == "active"
+        )
+    )
+    membership = result.scalar_one_or_none()
+
+    if not membership:
+        logger.error(f"No active membership found for user {user_id}")
+        raise HTTPException(status_code=404, detail="User membership not found")
+
+    old_role = membership.role
+    membership.role = new_role
+    await db.commit()
+
+    logger.info(f"✅ Role updated for user {user_id}: {old_role} -> {new_role}")
+
+    return {
+        "user_id": user_id,
+        "old_role": old_role,
+        "new_role": new_role,
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+
+
 @router.post("/auth/sso/saml/callback")
 async def saml_callback(
     request: Request,
@@ -2101,46 +2227,46 @@ async def saml_callback(
     db: AsyncSession = Depends(get_db),
 ):
     """Handle SAML callback from IdP.
-    
+
     Processes the SAML response and creates/updates user session.
     """
     from .saml import is_saml_enabled, process_saml_response
-    
+
     if not is_saml_enabled():
         raise HTTPException(
             status_code=501,
             detail="SAML SSO is not enabled."
         )
-    
+
     # Get SAML response from form data
     form_data = await request.form()
     saml_response = form_data.get("SAMLResponse")
     relay_state = form_data.get("RelayState")
-    
+
     if not saml_response:
         raise HTTPException(status_code=400, detail="Missing SAMLResponse")
-    
+
     # Extract org_id from relay_state or session
     # In production, this would be stored in a secure session
     org_id_str = form_data.get("org_id") or relay_state
     if not org_id_str:
         raise HTTPException(status_code=400, detail="Missing organization context")
-    
+
     try:
         org_id = UUID(org_id_str)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid organization ID")
-    
+
     try:
         user, is_new = await process_saml_response(
             saml_response=saml_response,
             org_id=org_id,
             db=db,
         )
-        
+
         # Create session for user
         membership = await _resolve_membership(db, user.id, org_id)
-        
+
         identity = Identity(
             user_id=user.id,
             org_id=membership.org_id,

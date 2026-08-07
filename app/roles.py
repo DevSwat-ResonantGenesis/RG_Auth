@@ -4,6 +4,10 @@ Ported from old backend for full compatibility.
 
 Roles:
 - viewer: Public viewer (unauthenticated) - no access
+- unsubscribed: Default role for new users (no subscription)
+- plus_plan: Paid tier (developer/plus - $29/mo)
+- business_plan: Paid tier (business - $499/mo)
+- enterprise_plan: Paid tier (enterprise - custom)
 - user: Authenticated org member (non-admin)
 - org_admin: Organization admin (tenant admin)
 - platform_dev: Platform developer (system level, global)
@@ -16,6 +20,10 @@ Roles:
 # Role hierarchy (higher = more permissions)
 ROLE_HIERARCHY = {
     "viewer": 0,
+    "unsubscribed": 0,  # Default for new users, no subscription
+    "plus_plan": 1,  # Paid tier (developer/plus)
+    "business_plan": 2,  # Paid tier (business)
+    "enterprise_plan": 3,  # Paid tier (enterprise)
     "user": 1,
     "compliance": 2,
     "finance": 2,
@@ -32,6 +40,69 @@ ROLES = {
         "level": 0,
         "description": "Public viewer (unauthenticated)",
         "can_access": [],
+    },
+    "unsubscribed": {
+        "level": 0,
+        "description": "Default role for new users (no subscription)",
+        "can_access": [
+            "settings:view_profile",
+            "billing:view_usage",
+            "billing:manage_subscription",  # Can view/upgrade subscription
+        ],
+    },
+    "plus_plan": {
+        "level": 1,
+        "description": "Paid tier (developer/plus - $29/mo)",
+        "can_access": [
+            "dashboard:view",
+            "predictions:create",
+            "predictions:view_own",
+            "evidence:view",
+            "embeddings:create",
+            "audit:view_own",
+            "settings:view_profile",
+            "api_keys:manage_personal",
+            "billing:view_usage",
+            "billing:manage_subscription",
+        ],
+    },
+    "business_plan": {
+        "level": 2,
+        "description": "Paid tier (business - $499/mo)",
+        "can_access": [
+            "dashboard:view",
+            "dashboard:manage",
+            "predictions:create",
+            "predictions:view_all",
+            "predictions:delete",
+            "predictions:bulk_upload",
+            "predictions:export",
+            "evidence:view",
+            "evidence:manage",
+            "embeddings:create",
+            "embeddings:manage",
+            "policies:crud",
+            "compliance:manage",
+            "audit:view_org",
+            "audit:export",
+            "users:create",
+            "users:invite",
+            "users:remove",
+            "users:assign_roles",
+            "api_keys:manage_org",
+            "billing:full",
+            "model:view_versions",
+            "model:trigger_retrain",
+            "model:rollback",
+            "settings:org_config",
+        ],
+    },
+    "enterprise_plan": {
+        "level": 3,
+        "description": "Paid tier (enterprise - custom)",
+        "can_access": [
+            "*",  # All permissions
+        ],
     },
     "platform_owner": {
         "level": 6,

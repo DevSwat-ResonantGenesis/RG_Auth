@@ -251,7 +251,7 @@ async def _find_or_create_saml_user(
         membership = OrgMembership(
             user_id=user.id,
             org_id=org_id,
-            role="member",  # Default role for SAML users
+            role="unsubscribed",  # Default role for SAML users - requires subscription to upgrade
             status="active",
         )
         db.add(membership)

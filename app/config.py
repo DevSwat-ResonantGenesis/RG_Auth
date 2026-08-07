@@ -40,14 +40,18 @@ class Settings(BaseSettings):
     # API Key salt for hashing tokens
     API_KEY_SALT: str = ""
     
+    # Internal service key for HMAC signatures (must match BILLING config)
+    INTERNAL_SERVICE_KEY: str = ""
+    
+    # Feature flag: Enable subscription-first registration (default role = unsubscribed)
+    # Set to false to revert to old behavior (default role = owner)
+    SUBSCRIPTION_FIRST_REGISTRATION: bool = True
+    
     # Cookie settings
     ACCESS_COOKIE: str = "rg_access_token"
     REFRESH_COOKIE: str = "rg_refresh_token"
     COOKIE_DOMAIN: str = ""  # Set to ".yourdomain.com" in production for cross-subdomain; empty = same-origin
     COOKIE_SECURE: bool = True  # Always True in production (HTTPS required)
-    
-    # Internal service key for service-to-service auth
-    INTERNAL_SERVICE_KEY: str = ""
     
     # Email service configuration
     # Option 1: SMTP (Google Workspace, etc.)
